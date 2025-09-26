@@ -1,5 +1,9 @@
 name: Build & Release PHP Extension
 
+# Give write permission to contents for creating releases
+permissions:
+  contents: write
+
 on:
   push:
     tags:
@@ -74,6 +78,8 @@ jobs:
   package-release:
     runs-on: ubuntu-latest
     needs: [build-linux-macos, build-windows]
+    env:
+      GITHUB_REF: ${{ github.ref }}
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -98,13 +104,15 @@ jobs:
 
       - name: Create OS-specific ZIP
         run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "Creating hello-${TAG_NAME}.zip"
           cd release
-          zip -r ../hello-${GITHUB_REF_NAME}.zip *
+          zip -r ../hello-${TAG_NAME}.zip *
           cd ..
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: hello-${GITHUB_REF_NAME}.zip
+          files: hello-${TAG_NAME}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
