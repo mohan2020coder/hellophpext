@@ -50,7 +50,7 @@ jobs:
       - name: Build extension (Windows)
         uses: php/php-windows-builder/extension@v1
         with:
-          extension-url: https://github.com/YOURNAME/hello-ext.git
+          extension-url: https://github.com/mohan2020coder/hellophpext.git
           extension-ref: main
           php-version: ${{ matrix.php }}
           arch: ${{ matrix.arch }}
