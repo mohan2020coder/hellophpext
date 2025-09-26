@@ -61,12 +61,14 @@ jobs:
           ts: ${{ matrix.ts }}
           args: "--enable-hello"
 
-      - name: Prepare ini
+      - name: Prepare ini and copy DLLs
         run: |
           mkdir output
           echo "; Enable hello extension" > output/hello.ini
           echo "extension=hello" >> output/hello.ini
-          Copy-Item artifacts\**\*.dll output\
+          echo "Listing DLL files under artifacts directory:"
+          Get-ChildItem -Path artifacts -Recurse -Filter *.dll
+          Copy-Item -Path "artifacts\**\*.dll" -Destination output\ -Recurse
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
