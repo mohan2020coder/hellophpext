@@ -1,0 +1,71 @@
+name: Build PHP Extension (Cross-platform)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-linux-macos:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        php: ['8.1', '8.2', '8.3']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          tools: phpize
+
+      - name: Build extension
+        run: |
+          phpize
+          ./configure --enable-hello
+          make
+          mkdir -p output
+          cp modules/*.so output/
+          echo "; Enable hello extension" > output/hello.ini
+          echo "extension=hello" >> output/hello.ini
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-${{ matrix.os }}-php${{ matrix.php }}
+          path: output/*
+
+  build-windows:
+    strategy:
+      matrix:
+        arch: [x64, x86]
+        ts: [nts, ts]
+        php: ['8.1', '8.2', '8.3']
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build extension (Windows)
+        uses: php/php-windows-builder/extension@v1
+        with:
+          extension-url: https://github.com/YOURNAME/hello-ext.git
+          extension-ref: main
+          php-version: ${{ matrix.php }}
+          arch: ${{ matrix.arch }}
+          ts: ${{ matrix.ts }}
+          args: "--enable-hello"
+
+      - name: Prepare ini
+        run: |
+          mkdir output
+          echo "; Enable hello extension" > output/hello.ini
+          echo "extension=hello" >> output/hello.ini
+          Copy-Item artifacts\**\*.dll output\
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-windows-${{ matrix.arch }}-${{ matrix.ts }}-php${{ matrix.php }}
+          path: output/*

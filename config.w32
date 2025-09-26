@@ -1,0 +1,5 @@
+ARG_ENABLE("hello", "Enable hello support", "no");
+
+if (PHP_HELLO != "no") {
+  EXTENSION("hello", "hello.c");
+}
