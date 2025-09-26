@@ -61,20 +61,52 @@ jobs:
           ts: ${{ matrix.ts }}
           args: "--enable-hello"
 
+      - name: Debug: List artifacts structure
+        run: |
+          Write-Host "Full artifacts directory structure:"
+          Get-ChildItem -Path artifacts -Recurse -Force
+          Write-Host "DLL files found:"
+          Get-ChildItem -Path artifacts -Recurse -Filter *.dll
+
       - name: Prepare ini and copy DLLs
         run: |
+          # Remove existing output directory
+          Remove-Item -Path output -Recurse -Force -ErrorAction SilentlyContinue
           mkdir output
+          
+          # Create ini file with correct extension name for Windows
           echo "; Enable hello extension" > output/hello.ini
-          echo "extension=hello" >> output/hello.ini
-          echo "Listing DLL files under artifacts directory:"
-          Get-ChildItem -Path artifacts -Recurse -Filter *.dll
-          Copy-Item -Path "artifacts\**\*.dll" -Destination output\ -Recurse
+          echo "extension=php_hello" >> output/hello.ini
+          
+          # Find and copy all DLL files from artifacts
+          $dllFiles = Get-ChildItem -Path artifacts -Recurse -Filter *.dll
+          Write-Host "Found $($dllFiles.Count) DLL files:"
+          foreach ($dll in $dllFiles) {
+              Write-Host "Copying: $($dll.FullName)"
+              Copy-Item -Path $dll.FullName -Destination output
+          }
+          
+          # Also try to find the DLL with specific patterns
+          if (Test-Path "artifacts\php_hello.dll") {
+              Copy-Item -Path "artifacts\php_hello.dll" -Destination output
+          }
+          if (Test-Path "artifacts\Release\php_hello.dll") {
+              Copy-Item -Path "artifacts\Release\php_hello.dll" -Destination output
+          }
+
+      - name: Verify output contents
+        run: |
+          Write-Host "Contents of output directory:"
+          Get-ChildItem -Path output -Recurse
+          Write-Host "File sizes:"
+          Get-ChildItem -Path output -Recurse | ForEach-Object { Write-Host "$($_.Name): $($_.Length) bytes" }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: hello-windows-${{ matrix.arch }}-${{ matrix.ts }}-php${{ matrix.php }}
           path: output/*
+          retention-days: 1
 
   package-release:
     runs-on: ubuntu-latest
@@ -86,31 +118,67 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: dist/
+          pattern: hello-*
+          merge-multiple: true
+
+      - name: Debug: List downloaded artifacts
+        run: |
+          echo "Downloaded artifacts structure:"
+          find dist/ -type f -name "*" | sort
+          echo "Artifact directories:"
+          ls -la dist/
 
       - name: Organize artifacts by OS
         run: |
           mkdir -p release/linux release/macos release/windows
-          for d in dist/*; do
-            if [[ "$d" == *ubuntu* ]]; then
-              cp -r "$d"/* release/linux/
-            elif [[ "$d" == *macos* ]]; then
-              cp -r "$d"/* release/macos/
-            elif [[ "$d" == *windows* ]]; then
-              cp -r "$d"/* release/windows/
+          
+          # Copy Linux artifacts
+          for d in dist/hello-ubuntu*; do
+            if [ -d "$d" ]; then
+              echo "Copying Linux artifact: $d"
+              cp -r "$d"/* release/linux/ 2>/dev/null || true
             fi
           done
+          
+          # Copy macOS artifacts  
+          for d in dist/hello-macos*; do
+            if [ -d "$d" ]; then
+              echo "Copying macOS artifact: $d"
+              cp -r "$d"/* release/macos/ 2>/dev/null || true
+            fi
+          done
+          
+          # Copy Windows artifacts
+          for d in dist/hello-windows*; do
+            if [ -d "$d" ]; then
+              echo "Copying Windows artifact: $d"
+              cp -r "$d"/* release/windows/ 2>/dev/null || true
+            fi
+          done
+          
+          echo "Final release directory structure:"
+          find release/ -type f | sort
 
       - name: Create OS-specific ZIPs
         run: |
           echo "Creating hello-${TAG_NAME} OS-specific ZIP files"
+          ls -la release/
 
           cd release
           for os in linux macos windows; do
-            if [ -d "$os" ]; then
+            if [ -d "$os" ] && [ "$(ls -A $os)" ]; then
+              echo "Creating ZIP for $os with files:"
+              ls -la $os/
               zip -r ../hello-${os}-${TAG_NAME}.zip "$os"
+            else
+              echo "Warning: $os directory is empty or missing"
             fi
           done
           cd ..
+
+      - name: List ZIP files before release
+        run: |
+          ls -la hello-*.zip || echo "No ZIP files found"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
