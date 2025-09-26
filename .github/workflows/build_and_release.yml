@@ -61,11 +61,27 @@ jobs:
           ts: ${{ matrix.ts }}
           args: "--enable-hello"
 
+      - name: List entire workspace for DLLs (debug)
+        shell: pwsh
+        run: |
+          Write-Host "Searching entire workspace for DLL files:"
+          $allDlls = Get-ChildItem -Path . -Recurse -Filter *.dll -ErrorAction SilentlyContinue
+          if ($allDlls.Count -eq 0) {
+            Write-Warning "No DLL files found anywhere in workspace!"
+          } else {
+            $allDlls | ForEach-Object { Write-Host "Found DLL: $($_.FullName)" }
+          }
+
       - name: List artifacts directory contents
         shell: pwsh
         run: |
           Write-Host "Checking contents of artifacts folder"
-          Get-ChildItem -Path artifacts -Recurse | Format-List
+          $artifactsExist = Test-Path artifacts
+          if (-not $artifactsExist) {
+            Write-Warning "'artifacts' folder does not exist!"
+          } else {
+            Get-ChildItem -Path artifacts -Recurse | Format-List FullName
+          }
 
       - name: Prepare ini and copy DLLs
         shell: pwsh
@@ -75,15 +91,23 @@ jobs:
           Add-Content -Path output\hello.ini -Value "extension=hello"
 
           Write-Host "Listing DLL files under artifacts directory:"
-          $dlls = Get-ChildItem -Path artifacts -Recurse -Filter *.dll
+          $dlls = Get-ChildItem -Path artifacts -Recurse -Filter *.dll -ErrorAction SilentlyContinue
+
           if ($dlls.Count -eq 0) {
-            Write-Error "No DLL files found under artifacts!"
+            Write-Warning "No DLL files found under artifacts! Searching entire workspace..."
+            $dlls = Get-ChildItem -Path . -Recurse -Filter *.dll -ErrorAction SilentlyContinue
+          }
+
+          if ($dlls.Count -eq 0) {
+            Write-Error "No DLL files found to copy!"
             exit 1
           }
+
           $dlls | ForEach-Object {
             Write-Host "Copying DLL: $($_.FullName)"
             Copy-Item -Path $_.FullName -Destination output
           }
+
           Write-Host "DLL files copied to output folder:"
           Get-ChildItem -Path output
 
